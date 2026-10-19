@@ -72,7 +72,7 @@ A saída esperada é:
 }
 ```
 
-## Como usar o motor no seu código
+## Como usar o motor no código
 
 ```python
 from suitability import validar_suitability
