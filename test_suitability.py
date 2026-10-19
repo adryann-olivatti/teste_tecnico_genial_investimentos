@@ -61,6 +61,8 @@ class TestCalculo(unittest.TestCase):
 
 
 class TestDecisao(unittest.TestCase):
+    """Faixas (score 2,5): Aprovado <= 2,75 | Alerta <= 3,25 | Rejeitado > 3,25."""
+
     def test_aprovado(self):
         r = validar_suitability(PERFIL, CARTEIRA, ordem(1.5, 20000))
         self.assertEqual(r["status"], "Aprovado")
@@ -70,39 +72,67 @@ class TestDecisao(unittest.TestCase):
     def test_exemplo_do_enunciado_fii(self):
         self.assertEqual(validar_suitability(PERFIL, CARTEIRA, ordem(3.5, 5000))["status"], "Aprovado")
 
+    def test_exemplos_de_saida_do_enunciado(self):
+        # Aprovado 2.1 | Alerta 2.78 | Rejeitado 3.5 (score 2.5)
+        for risco, status in [("2.1", "Aprovado"), ("2.78", "Alerta"), ("3.5", "Rejeitado")]:
+            with self.subTest(risco=risco):
+                r = fronteira(2.5, risco)
+                self.assertEqual(r["status"], status)
+                self.assertEqual(r["risco_projetado"], float(risco))
+
+    def test_mensagens_exatas_do_enunciado(self):
+        self.assertEqual(
+            fronteira(2.5, "2.78")["mensagem"],
+            "Atenção: O risco da carteira ultrapassará o limite de 2.75. É necessário termo de ciência.",
+        )
+        self.assertEqual(
+            fronteira(2.5, "3.5")["mensagem"],
+            "Risco excessivo. A operação viola a política de Suitability.",
+        )
+
     def test_alerta(self):
-        r = validar_suitability(PERFIL, CARTEIRA, ordem(4.5, 30000))
+        r = validar_suitability(PERFIL, CARTEIRA, ordem(5.0, 40000))
         self.assertEqual(r["status"], "Alerta")
-        self.assertEqual(r["risco_projetado"], 2.61)
+        self.assertEqual(r["risco_projetado"], 3.0)
         self.assertIn("2.75", r["mensagem"])
         self.assertIn("termo de ciência", r["mensagem"])
 
     def test_rejeitado(self):
         r = validar_suitability(PERFIL, CARTEIRA, ordem(5.0, 80000))
         self.assertEqual(r["status"], "Rejeitado")
-        self.assertGreater(r["risco_projetado"], 2.75)
+        self.assertGreater(r["risco_projetado"], 3.25)
 
-    def test_fronteira_exatamente_no_score_e_aprovado(self):
+    def test_entre_score_e_limite_de_alerta_ainda_e_aprovado(self):
+        # O alerta só dispara ACIMA de score x 1,1 (2,75), não acima do score.
         self.assertEqual(fronteira(2.5, 2.5)["status"], "Aprovado")
+        self.assertEqual(fronteira(2.5, "2.6")["status"], "Aprovado")
 
-    def test_fronteira_exatamente_no_limite_de_alerta_e_alerta(self):
-        self.assertEqual(fronteira(2.5, 2.75)["status"], "Alerta")
+    def test_fronteira_exatamente_no_limite_de_alerta_e_aprovado(self):
+        self.assertEqual(fronteira(2.5, 2.75)["status"], "Aprovado")
 
-    def test_logo_acima_do_score_e_alerta(self):
-        self.assertEqual(fronteira(2.5, "2.5001")["status"], "Alerta")
+    def test_logo_acima_do_limite_de_alerta_e_alerta(self):
+        self.assertEqual(fronteira(2.5, "2.7501")["status"], "Alerta")
 
-    def test_logo_acima_do_limite_e_rejeitado(self):
-        self.assertEqual(fronteira(2.5, "2.7501")["status"], "Rejeitado")
+    def test_fronteira_exatamente_no_limite_de_rejeicao_e_alerta(self):
+        self.assertEqual(fronteira(2.5, 3.25)["status"], "Alerta")
+
+    def test_logo_acima_do_limite_de_rejeicao_e_rejeitado(self):
+        self.assertEqual(fronteira(2.5, "3.2501")["status"], "Rejeitado")
 
     def test_decisao_usa_valor_exato_nao_o_arredondado(self):
-        r = fronteira(2.5, "2.7504")
+        r = fronteira(2.5, "3.2504")
         self.assertEqual(r["status"], "Rejeitado")
-        self.assertEqual(r["risco_projetado"], 2.75)  # exibição arredondada
+        self.assertEqual(r["risco_projetado"], 3.25)  # exibição arredondada
+        r = fronteira(2.5, "2.7504")
+        self.assertEqual(r["status"], "Alerta")
+        self.assertEqual(r["risco_projetado"], 2.75)
 
     def test_sem_ruido_de_float_na_fronteira(self):
         # 3.0 * 1.1 == 3.3000000000000003 em float; com Decimal é exato.
-        self.assertEqual(fronteira(3.0, 3.3)["status"], "Alerta")
-        self.assertEqual(fronteira(3.0, "3.3001")["status"], "Rejeitado")
+        self.assertEqual(fronteira(3.0, 3.3)["status"], "Aprovado")
+        self.assertEqual(fronteira(3.0, "3.3001")["status"], "Alerta")
+        self.assertEqual(fronteira(3.0, 3.9)["status"], "Alerta")
+        self.assertEqual(fronteira(3.0, "3.9001")["status"], "Rejeitado")
 
     def test_aceita_int_decimal_e_string(self):
         for score, risco in [(3, 3), (Decimal("2.5"), Decimal("2.5")), ("2.5", "2.5")]:
@@ -119,6 +149,34 @@ class TestDecisao(unittest.TestCase):
     def test_muitos_ativos(self):
         carteira = [{"risco": 1.0, "valor_investido": 1.0}] * 100_000
         self.assertEqual(validar_suitability(PERFIL, carteira, ordem(1.0, 1.0))["status"], "Aprovado")
+
+
+class TestFatores(unittest.TestCase):
+    """O fator de rejeição é uma premissa: deve ser configurável e validado."""
+
+    def test_fatores_personalizados(self):
+        def run(risco):
+            return validar_suitability(
+                {"score_max_risco": 2.5},
+                [{"risco": risco, "valor_investido": 100}],
+                ordem(risco, 100),
+                fator_rejeicao=1.2,
+            )
+        self.assertEqual(run(3.0)["status"], "Alerta")        # 3.0 = 2.5 x 1.2 (limite)
+        self.assertEqual(run("3.0001")["status"], "Rejeitado")
+
+    def test_fatores_invalidos(self):
+        for kwargs in [
+            {"fator_alerta": 0.9},                          # < 1
+            {"fator_rejeicao": 1.05},                       # <= fator_alerta (1,1)
+            {"fator_alerta": 1.2, "fator_rejeicao": 1.2},   # iguais
+            {"fator_alerta": "abc"}, {"fator_rejeicao": float("nan")}, {"fator_alerta": True},
+        ]:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValidacaoEntradaError):
+                    validar_suitability(PERFIL, CARTEIRA, ordem(1.0, 1000), **kwargs)
+                r = validar_suitability_seguro(PERFIL, CARTEIRA, ordem(1.0, 1000), **kwargs)
+                self.assertEqual(r["status"], "Erro")  # fail-closed
 
 
 class TestEntradasInvalidas(unittest.TestCase):

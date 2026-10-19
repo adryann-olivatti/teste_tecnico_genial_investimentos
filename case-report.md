@@ -1,5 +1,17 @@
 # Case I — Relatório: Motor de Validação de Suitability (CVM 30)
 
+## Premissas do motor
+
+O risco projetado é comparado ao `score_max_risco` do cliente em três faixas:
+
+| Risco projetado | Status |
+|---|---|
+| até `score × 1,1` | `Aprovado` |
+| acima de `score × 1,1` e até `score × 1,3` | `Alerta` (desenquadramento leve, exige Termo de Ciência) |
+| acima de `score × 1,3` | `Rejeitado` (desenquadramento severo) |
+
+O fator **1,1** vem do enunciado (com score 2,5, o alerta dispara acima de 2,75). O enunciado não define o limite do desenquadramento severo, então **1,3 é uma premissa** (qualquer valor entre ~1,11 e 1,4 reproduz os exemplos de saída: 2,78 = Alerta e 3,5 = Rejeitado). Os dois fatores são parâmetros do motor.
+
 ## 1. Regulação vs. Negócio
 
 **Situação:** o motor retorna `Alerta` e o cliente insiste em comprar. A CVM permite, mediante **Termo de Ciência**. O `Rejeitado` não tem essa saída: nenhum termo o libera.
@@ -12,7 +24,7 @@
 | **Registro do Termo de Ciência** | Gravar no banco, ligado à ordem e ao cliente: quem aceitou (login e autenticação, ex.: MFA), data/hora (UTC), IP e dispositivo, versão e *hash* do texto exibido, e o perfil, o risco projetado e o limite mostrados ao cliente. |
 | **Aceite explícito** | O cliente deve marcar ou assinar ativamente. Nunca uma opção pré-marcada. |
 | **Log de auditoria** | Registrar toda validação (`Aprovado`, `Alerta` e `Rejeitado`): entradas, saída, versão do motor e das regras, data/hora e um `correlation_id`. Assim a decisão pode ser **reproduzida** numa auditoria. |
-| **Regras configuráveis e versionadas** | O fator 1,1 não deve ficar fixo no código. Cada decisão registra qual versão da regra foi usada. |
+| **Regras configuráveis e versionadas** | Os fatores de alerta (1,1) e de rejeição (1,3, premissa) são parâmetros do motor. Em produção, devem vir de uma configuração versionada, não de constantes no código. Cada decisão registra qual versão da regra foi usada. |
 | **Imutabilidade e guarda** | Termos e logs em armazenamento só de inclusão (sem editar ou apagar), com backup e prazo de guarda conforme a regulação (a confirmar com o Compliance). |
 | **Revalidar na execução** | Preços e riscos mudam entre o alerta e a execução. O motor roda de novo na hora de executar. |
 | **Validade do termo** | Curta, e válido só para aquela ordem e aquele valor. |
@@ -30,7 +42,7 @@
 
 ## 2. Desenquadramento Passivo
 
-**Ideia central:** o mesmo motor serve para monitorar a carteira **sem nova ordem**. `calcular_risco_carteira(carteira)` (sem `nova_ordem`) já retorna o risco atual, comparado ao `score_max_risco` com as mesmas faixas (dentro do limite, desenquadramento leve e severo).
+**Ideia central:** o mesmo motor serve para monitorar a carteira **sem nova ordem**. `calcular_risco_carteira(carteira)` (sem `nova_ordem`) já retorna o risco atual, comparado ao `score_max_risco` com as mesmas faixas (enquadrado até `score × 1,1`, desenquadramento leve até `score × 1,3` e severo acima disso).
 
 ### Como funcionaria
 

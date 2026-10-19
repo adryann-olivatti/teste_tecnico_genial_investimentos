@@ -44,7 +44,7 @@ ou, dependendo do seu sistema:
 python3 main.py
 ```
 
-Esse comando executa **só o teste do `main.py`**: três ordens de exemplo (Aprovado, Alerta e Rejeitado) com a carteira do enunciado, com o resultado impresso em JSON. **Ele não executa os 25 testes automatizados.** Para esses, veja a seção "Como rodar os testes".
+Esse comando executa **só o teste do `main.py`**: três ordens de exemplo (Aprovado, Alerta e Rejeitado) com a carteira do enunciado, com o resultado impresso em JSON. **Ele não executa os 30 testes automatizados.** Para esses, veja a seção "Como rodar os testes".
 
 A saída esperada é:
 
@@ -59,7 +59,7 @@ A saída esperada é:
 ```json
 {
   "status": "Alerta",
-  "risco_projetado": 2.61,
+  "risco_projetado": 3.0,
   "mensagem": "Atenção: O risco da carteira ultrapassará o limite de 2.75. É necessário termo de ciência."
 }
 ```
@@ -95,9 +95,13 @@ O risco da carteira é uma **média ponderada** pelo valor investido. O risco pr
 
 | Risco projetado | Status |
 |---|---|
-| até o `score_max_risco` | `Aprovado` |
-| acima do `score_max_risco` e até `score_max_risco × 1,1` | `Alerta` |
-| acima de `score_max_risco × 1,1` | `Rejeitado` |
+| até `score_max_risco × 1,1` | `Aprovado` |
+| acima de `score_max_risco × 1,1` e até `score_max_risco × 1,3` | `Alerta` (exige Termo de Ciência) |
+| acima de `score_max_risco × 1,3` | `Rejeitado` |
+
+Exemplo com `score_max_risco = 2,5`: aprovado até 2,75; alerta de 2,75 (exclusive) até 3,25; rejeitado acima de 3,25. Isso reproduz os três exemplos de saída do enunciado (2,1 = Aprovado, 2,78 = Alerta, 3,5 = Rejeitado).
+
+> **Premissa:** o fator **1,1** (alerta) vem do enunciado. O enunciado **não define** onde começa o desenquadramento severo (Rejeitado), então adotei **1,3** como premissa. Qualquer valor entre cerca de 1,11 e 1,4 reproduz os exemplos do enunciado. O valor é configurável: `validar_suitability(perfil, carteira, ordem, fator_alerta=1.1, fator_rejeicao=1.3)`.
 
 A decisão usa o valor exato. O `risco_projetado` mostrado na saída é arredondado para 2 casas.
 
@@ -105,8 +109,8 @@ A decisão usa o valor exato. O `risco_projetado` mostrado na saída é arredond
 
 | Função | O que faz |
 |---|---|
-| `validar_suitability(perfil, carteira, ordem)` | Retorna o JSON com a decisão. Se a entrada for inválida, levanta `ValidacaoEntradaError`. |
-| `validar_suitability_seguro(perfil, carteira, ordem)` | Igual à anterior, mas nunca levanta erro. Se algo der errado, retorna `status: "Erro"` e a ordem **não é aprovada**. |
+| `validar_suitability(perfil, carteira, ordem, fator_alerta=None, fator_rejeicao=None)` | Retorna o JSON com a decisão. Os fatores são opcionais (padrão 1,1 e 1,3). Se a entrada for inválida, levanta `ValidacaoEntradaError`. |
+| `validar_suitability_seguro(perfil, carteira, ordem, ...)` | Igual à anterior, mas nunca levanta erro. Se algo der errado, retorna `status: "Erro"` e a ordem **não é aprovada**. |
 | `calcular_risco_carteira(carteira, nova_ordem=None)` | Retorna o risco ponderado e o valor total. Sem `nova_ordem`, é o risco atual. |
 
 ## Como rodar os testes
@@ -116,9 +120,9 @@ Há duas formas de testar o projeto:
 | O que você quer | Comando | O que executa |
 |---|---|---|
 | Ver só o teste do `main.py` (rápido) | `python3 main.py` | Apenas os 3 cenários de exemplo |
-| Rodar os testes automatizados | `python3 -m unittest -v` | Os 25 testes do `test_suitability.py` |
+| Rodar os testes automatizados | `python3 -m unittest -v` | Os 30 testes do `test_suitability.py` |
 
-Para rodar os 25 testes, na pasta do projeto:
+Para rodar os 30 testes, na pasta do projeto:
 
 ```bash
 python -m unittest -v
@@ -133,7 +137,7 @@ python3 -m unittest -v
 O `-v` mostra cada teste e se passou. O resultado esperado termina com:
 
 ```
-Ran 25 tests in 0.3s
+Ran 30 tests in 0.5s
 
 OK
 ```
@@ -161,7 +165,8 @@ pytest -v
 ### O que os testes cobrem
 
 - **Cálculo:** risco atual, risco projetado e carteira vazia.
-- **Decisão:** os três status, o exemplo do enunciado e os limites exatos (2,5 e 2,75).
+- **Decisão:** os três status, os exemplos de saída do enunciado (2,1, 2,78 e 3,5) e os limites exatos (2,75 e 3,25).
+- **Fatores:** fatores de alerta e rejeição personalizados e validação de fatores inválidos.
 - **Entradas inválidas:** campos ausentes, valores negativos ou zero, `NaN`, texto no lugar de número e tipos errados.
 - **Robustez:** as entradas não são alteradas, e um teste com 5.000 entradas aleatórias confirma que o motor nunca quebra fora do esperado.
 

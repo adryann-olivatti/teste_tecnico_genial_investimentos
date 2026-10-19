@@ -13,7 +13,7 @@ def main():
 
     cenarios = [
         ("Aprovado", {"ativo": "FII YYY", "risco": 1.5, "valor_ordem": 20000.0}),
-        ("Alerta (Desenquadramento Leve)", {"ativo": "Ação High Risk", "risco": 4.5, "valor_ordem": 30000.0}),
+        ("Alerta (Desenquadramento Leve)", {"ativo": "Ação High Risk", "risco": 5.0, "valor_ordem": 40000.0}),
         ("Rejeitado (Desenquadramento Severo)", {"ativo": "Crypto XYZ", "risco": 5.0, "valor_ordem": 80000.0}),
     ]
 
